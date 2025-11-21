@@ -457,3 +457,19 @@ connect_from_port_20=YES
 ```
 No es necesario modificar ninguna otra opción.
 El cliente funciona tanto en modo PASV como modo PORT usando la configuración por defecto del servidor.
+
+### 📌 Nota sobre archivos auxiliares
+
+El cliente FTP utiliza las funciones proporcionadas por el curso:
+- `connectsock.c`
+- `connectTCP.c`
+- `errexit.c`
+
+Estos archivos **no forman parte del repositorio** porque fueron entregados en el aula virtual de la materia.  
+El Makefile asume que dichos archivos se encuentran en el mismo directorio al momento de compilar.
+
+Para compilar correctamente, coloque estos archivos junto al código principal y ejecute:
+
+```bash
+make
+```
