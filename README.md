@@ -208,129 +208,210 @@ STOR <f1> [f2 ...]
 QUIT
 ```
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Aquí tienes la **sección completa de ejemplos** en **Markdown**, lista para pegar directamente en tu README:
+
+---
+
 ## ▶ Ejemplos de Uso (todos los comandos)
 
 A continuación se muestran ejemplos concretos del uso de cada comando soportado por el cliente FTP.
 
-##🔹 1. LIST — Listar archivos del servidor
+---
+
+### 🔹 **1. LIST — Listar archivos del servidor**
 
 Muestra todos los archivos del directorio actual del servidor.
-```
+
+```txt
 LIST
 ```
 
 Salida típica:
-```
+
+```txt
 -rw-r--r-- archivo1.txt
 drwxr-xr-x carpeta1
 ```
 
-##🔹 2. PWD — Mostrar el directorio actual del servidor
-```
+---
+
+### 🔹 **2. PWD — Mostrar el directorio actual del servidor**
+
+```txt
 PWD
 ```
 
 Salida:
-```
+
+```txt
 257 "/home/usuario/ftp" is current directory
 ```
 
-##🔹 3. CWD <dir> — Cambiar de directorio
+---
+
+### 🔹 **3. CWD <dir> — Cambiar de directorio**
 
 Ejemplo:
-```
+
+```txt
 CWD Documentos
 ```
 
-Cambia el directorio remoto a “Documentos”.
+Cambia al directorio remoto `Documentos`.
 
-##🔹 4. MKD <dir> — Crear directorio en el servidor
-```
+---
+
+### 🔹 **4. MKD <dir> — Crear un directorio en el servidor**
+
+```txt
 MKD NuevaCarpeta
 ```
-##🔹 5. RMD <dir> — Eliminar directorio
-```
+
+Crea `NuevaCarpeta` en el servidor.
+
+---
+
+### 🔹 **5. RMD <dir> — Eliminar un directorio**
+
+```txt
 RMD CarpetaVacia
 ```
 
 Solo funciona si el directorio está vacío.
 
-##🔹 6. DELE <archivo> — Eliminar archivo del servidor
-```
+---
+
+### 🔹 **6. DELE <archivo> — Eliminar un archivo del servidor**
+
+```txt
 DELE archivoObsoleto.txt
 ```
-##🔹 7. MODE PASV — Activar transferencia pasiva
-```
+
+Elimina un archivo del directorio remoto.
+
+---
+
+### 🔹 **7. MODE PASV — Activar modo pasivo**
+
+```txt
 MODE PASV
 ```
 
-El cliente:
+El servidor devuelve un puerto y el cliente se conecta a él.
 
-Envia PASV
+---
 
-El servidor devuelve IP/puerto
+### 🔹 **8. MODE PORT — Activar modo activo**
 
-El cliente se conecta al puerto del servidor
-
-##🔹 8. MODE PORT — Activar transferencia activa
-```
+```txt
 MODE PORT
 ```
 
-El cliente:
+El cliente abre un puerto local, envía `PORT h1,h2,h3,h4,p1,p2` y el servidor se conecta al cliente.
 
-Abre un puerto local
+---
 
-Envía PORT h1,h2,h3,h4,p1,p2
+### 🔹 **9. RETR <archivo> — Descargar un archivo**
 
-El servidor se conecta al cliente
-
-##🔹 9. RETR <archivo> — Descargar un archivo
-```
+```txt
 RETR video.mp4
 ```
 
-Crea un hijo que abre su propia conexión y descarga el archivo.
+Crea un proceso hijo que descarga el archivo sin bloquear la sesión principal.
 
-Descargar varios concurrentemente:
-```
+#### Descargar varios archivos **concurrentemente**
+
+```txt
 RETR foto1.png foto2.png foto3.png
 ```
 
-Cada archivo se descarga en su propio proceso hijo, sin bloquear la sesión principal.
+Cada archivo se procesa en **un proceso hijo independiente**.
 
-##🔹 10. STOR <archivo> — Subir un archivo
-```
+---
+
+### 🔹 **10. STOR <archivo> — Subir un archivo**
+
+```txt
 STOR documento.pdf
 ```
 
-Sube un archivo local al servidor.
+Sube un archivo al servidor.
 
-Subir varios concurrentemente:
-```
+#### Subir varios archivos concurrentemente:
+
+```txt
 STOR a.pdf b.pdf c.pdf
 ```
 
-##🔹 11. REST (automático) — Reanudar descargas interrumpidas
+---
 
-El usuario NO escribe REST manualmente.
+### 🔹 **11. Reanudación automática (REST) — Solo para RETR**
 
-El cliente detecta automáticamente si existe un archivo parcial:
-```
+El usuario **no escribe REST manualmente**.
+El cliente lo aplica automáticamente si detecta un archivo parcial.
+
+Ejemplo:
+
+```txt
 RETR archivoGrande.bin
 ```
 
 Si el archivo existe localmente:
-```
-archivoGrande.bin (71655424 bytes) Ya existe → enviando REST 71655424
+
+```txt
+archivoGrande.bin (71655424 bytes) ya existe → enviando REST 71655424
 ```
 
-Si el servidor responde 350, la descarga se reanuda desde ahí.
+Si el servidor acepta:
 
-##🔹 12. QUIT — Cerrar sesión
+```txt
+350 Restart position accepted
 ```
+
+La descarga continúa desde donde se quedó.
+
+---
+
+### 🔹 **12. QUIT — Cerrar sesión**
+
+```txt
 QUIT
 ```
+
+Finaliza la conexión de control.
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 ## 📂 Estructura del Proyecto
 
