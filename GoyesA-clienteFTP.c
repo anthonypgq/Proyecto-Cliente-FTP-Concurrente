@@ -1,3 +1,4 @@
+#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,17 +10,18 @@
 #include <netinet/in.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <sys/stat.h>   // <<< REST: para stat()
 
 #define FTP_PORT_STR "21"
 #define BUFFER_SIZE 1024
 #define MAX_ARGS    16
 
-/* ==== Prototipos de las funciones proporcionadas ==== */
+/* ==== Prototipos ==== */
 int connectsock(const char *host, const char *service, const char *transport);
 int connectTCP(const char *host, const char *service);
 int errexit(const char *format, ...);
 
-/* ==== Estructura para compartir info de sesión con los hijos ==== */
+/* ==== Estructura de sesión ==== */
 typedef struct {
     char server_ip[64];
     char user[64];
@@ -28,8 +30,6 @@ typedef struct {
 } SessionInfo;
 
 /* ----------------- Utilidades generales ----------------- */
-
-/* Lee una respuesta (una línea) y la imprime */
 void leer_respuesta(int sock) {
     char buffer[BUFFER_SIZE];
     int len = recv(sock, buffer, BUFFER_SIZE - 1, 0);
@@ -48,8 +48,7 @@ int leer_codigo(int sock, char *linea, size_t tam) {
     return atoi(linea);
 }
 
-/* ----------------- Modo PASV ----------------- */
-/* Abre canal de datos en modo PASV y devuelve socket de datos ya conectado */
+/* ----------------- PASV ----------------- */
 int abrir_pasv(int sock_ctrl) {
     char buffer[BUFFER_SIZE];
     int data_sock;
@@ -57,7 +56,6 @@ int abrir_pasv(int sock_ctrl) {
     int len, p1, p2, i1, i2, i3, i4;
     char ip_str[64];
 
-    /* Enviar comando PASV */
     send(sock_ctrl, "PASV\r\n", 6, 0);
     len = recv(sock_ctrl, buffer, BUFFER_SIZE - 1, 0);
     if (len <= 0) {
@@ -97,14 +95,18 @@ int abrir_pasv(int sock_ctrl) {
     return data_sock;
 }
 
-/* ----------------- Modo PORT (activo) ----------------- */
-/* Prepara socket de escucha local y envía comando PORT; 
-   deja el socket escuchando en *listen_sock */
+/* ----------------- PORT ----------------- */
 int abrir_port(int sock_ctrl, int *listen_sock) {
     int lsock;
-    struct sockaddr_in addr;
+    struct sockaddr_in addr, local_ctrl_addr;
     socklen_t addrlen = sizeof(addr);
     char buffer[BUFFER_SIZE];
+
+    socklen_t ctrl_len = sizeof(local_ctrl_addr);
+    if (getsockname(sock_ctrl, (struct sockaddr*)&local_ctrl_addr, &ctrl_len) < 0) {
+        perror("getsockname (control)");
+        return -1;
+    }
 
     lsock = socket(AF_INET, SOCK_STREAM, 0);
     if (lsock < 0) {
@@ -113,9 +115,9 @@ int abrir_port(int sock_ctrl, int *listen_sock) {
     }
 
     memset(&addr, 0, sizeof(addr));
-    addr.sin_family      = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);   // cualquier IP local
-    addr.sin_port        = 0;                   // puerto efímero
+    addr.sin_family = AF_INET;
+    addr.sin_addr = local_ctrl_addr.sin_addr;
+    addr.sin_port = 0;
 
     if (bind(lsock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         perror("bind PORT");
@@ -129,37 +131,31 @@ int abrir_port(int sock_ctrl, int *listen_sock) {
         return -1;
     }
 
-    // Descubrimos IP y puerto local
     if (getsockname(lsock, (struct sockaddr*)&addr, &addrlen) < 0) {
-        perror("getsockname");
+        perror("getsockname (listen)");
         close(lsock);
         return -1;
     }
 
-    unsigned int ip = ntohl(addr.sin_addr.s_addr);
+    unsigned char *ip = (unsigned char*)&addr.sin_addr.s_addr;
     int p = ntohs(addr.sin_port);
     int p1 = p / 256;
     int p2 = p % 256;
 
-    int h1 = (ip >> 24) & 0xFF;
-    int h2 = (ip >> 16) & 0xFF;
-    int h3 = (ip >> 8) & 0xFF;
-    int h4 =  ip        & 0xFF;
+    snprintf(buffer, sizeof(buffer),
+             "PORT %d,%d,%d,%d,%d,%d\r\n",
+             ip[0], ip[1], ip[2], ip[3], p1, p2);
 
-    // Comando PORT h1,h2,h3,h4,p1,p2
-    snprintf(buffer, sizeof(buffer), "PORT %d,%d,%d,%d,%d,%d\r\n",
-             h1, h2, h3, h4, p1, p2);
     printf("📡 Enviando: %s", buffer);
     send(sock_ctrl, buffer, strlen(buffer), 0);
+    leer_respuesta(sock_ctrl);
 
-    leer_respuesta(sock_ctrl);  // normalmente 200 Command okay
+    printf("📡 Canal de datos PORT escuchando en puerto local %d\n", p);
 
     *listen_sock = lsock;
-    printf("📡 Canal de datos PORT escuchando en puerto local %d\n", p);
     return 0;
 }
 
-/* Acepta la conexión del servidor en modo PORT y devuelve el socket de datos */
 int aceptar_port(int listen_sock) {
     struct sockaddr_in cliaddr;
     socklen_t len = sizeof(cliaddr);
@@ -172,20 +168,17 @@ int aceptar_port(int listen_sock) {
     return data_sock;
 }
 
-/* ----------------- Login y conexión de control ----------------- */
-
-/* Realiza una sesión FTP simple: connectTCP + banner + USER/PASS */
+/* ----------------- Login ----------------- */
 int ftp_connect_and_login(const SessionInfo *info) {
     int ctrl = connectTCP(info->server_ip, FTP_PORT_STR);
     if (ctrl < 0) {
         perror("connectTCP");
         return -1;
     }
-    // leer banner 220
+
     leer_respuesta(ctrl);
 
     char buffer[BUFFER_SIZE];
-
     snprintf(buffer, sizeof(buffer), "USER %s\r\n", info->user);
     send(ctrl, buffer, strlen(buffer), 0);
     leer_respuesta(ctrl);
@@ -194,51 +187,89 @@ int ftp_connect_and_login(const SessionInfo *info) {
     send(ctrl, buffer, strlen(buffer), 0);
     leer_respuesta(ctrl);
 
+    /* <<< FORZAR MODO BINARIO >>> */
+    send(ctrl, "TYPE I\r\n", 8, 0);
+    leer_respuesta(ctrl);
+
     return ctrl;
 }
 
-/* ----------------- Transferencias en un proceso hijo ----------------- */
-
-/* Transferencia de un archivo (RETR o STOR) en un proceso hijo, usando PASV o PORT */
+/* ----------------- Transferencia hijo ----------------- */
 void hijo_transferencia(const SessionInfo *info, const char *cmd, const char *filename) {
+
     int ctrl = ftp_connect_and_login(info);
     if (ctrl < 0) exit(1);
 
     char buffer[BUFFER_SIZE];
     int data_sock = -1;
+    int lsock = -1;
 
-    if (info->use_pasv) {
-        data_sock = abrir_pasv(ctrl);
-        if (data_sock < 0) {
-            close(ctrl);
-            exit(1);
-        }
-    } else {
-        int lsock;
+    /* PORT: preparar escucha y enviar PORT */
+    if (!info->use_pasv) {
         if (abrir_port(ctrl, &lsock) < 0) {
-            close(ctrl);
-            exit(1);
-        }
-        data_sock = aceptar_port(lsock);
-        if (data_sock < 0) {
             close(ctrl);
             exit(1);
         }
     }
 
-    /* RETR: descargar desde servidor al archivo local */
+    /* ================= RETR con REST (reanudación) ================= */
     if (strcasecmp(cmd, "RETR") == 0) {
-        FILE *f = fopen(filename, "wb");
+
+        struct stat st;
+        off_t offset = 0;
+        int resume = 0;
+
+        /* ¿Existe ya el archivo local? */
+        if (stat(filename, &st) == 0 && st.st_size > 0) {
+            offset = st.st_size;
+            printf("🔍 Archivo local '%s' ya existe (%lld bytes). Intentando REST...\n",
+                   filename, (long long)offset);
+
+            /* Enviar REST <offset> */
+            snprintf(buffer, sizeof(buffer), "REST %lld\r\n", (long long)offset);
+            send(ctrl, buffer, strlen(buffer), 0);
+
+            int code = leer_codigo(ctrl, buffer, sizeof(buffer));
+            if (code >= 300 && code < 400) {
+                resume = 1;
+                printf("🔁 REST aceptado. Reanudando descarga desde el byte %lld.\n",
+                       (long long)offset);
+            } else {
+                printf("⚠ REST no aceptado (código %d). Descargando desde el inicio.\n", code);
+                offset = 0;
+            }
+        }
+
+        /* Abrir archivo local */
+        FILE *f;
+        if (resume) {
+            f = fopen(filename, "ab");   // continuar al final
+        } else {
+            f = fopen(filename, "wb");   // truncar o crear nuevo
+        }
+
         if (!f) {
-            perror("fopen local RETR");
-            close(data_sock);
+            perror("fopen RETR");
             close(ctrl);
+            if (lsock != -1) close(lsock);
             exit(1);
         }
 
+        /* Preparar canal de datos */
+        if (info->use_pasv) {
+            data_sock = abrir_pasv(ctrl);
+            if (data_sock < 0) { fclose(f); close(ctrl); exit(1); }
+        }
+
+        /* Enviar RETR */
         snprintf(buffer, sizeof(buffer), "RETR %s\r\n", filename);
         send(ctrl, buffer, strlen(buffer), 0);
-        leer_respuesta(ctrl); // 150 Opening data connection...
+        leer_respuesta(ctrl);   // 150...
+
+        if (!info->use_pasv) {
+            data_sock = aceptar_port(lsock);
+            if (data_sock < 0) { fclose(f); close(ctrl); exit(1); }
+        }
 
         int len;
         while ((len = recv(data_sock, buffer, BUFFER_SIZE, 0)) > 0) {
@@ -247,22 +278,28 @@ void hijo_transferencia(const SessionInfo *info, const char *cmd, const char *fi
 
         fclose(f);
         close(data_sock);
-        leer_respuesta(ctrl); // 226 Transfer complete
+        leer_respuesta(ctrl);   // 226
         printf("✅ [Hijo %d] Archivo descargado: %s\n", getpid(), filename);
     }
-    /* STOR: subir archivo local al servidor */
+
+    /* ================= STOR (SIN REST) ================= */
     else if (strcasecmp(cmd, "STOR") == 0) {
         FILE *f = fopen(filename, "rb");
-        if (!f) {
-            perror("fopen local STOR");
-            close(data_sock);
-            close(ctrl);
-            exit(1);
+        if (!f) { perror("fopen STOR"); close(ctrl); if(lsock!=-1) close(lsock); exit(1); }
+
+        if (info->use_pasv) {
+            data_sock = abrir_pasv(ctrl);
+            if (data_sock < 0) { fclose(f); close(ctrl); exit(1); }
         }
 
         snprintf(buffer, sizeof(buffer), "STOR %s\r\n", filename);
         send(ctrl, buffer, strlen(buffer), 0);
-        leer_respuesta(ctrl); // 150 Opening data connection...
+        leer_respuesta(ctrl);
+
+        if (!info->use_pasv) {
+            data_sock = aceptar_port(lsock);
+            if (data_sock < 0) { fclose(f); close(ctrl); exit(1); }
+        }
 
         int len;
         while ((len = fread(buffer, 1, BUFFER_SIZE, f)) > 0) {
@@ -271,7 +308,7 @@ void hijo_transferencia(const SessionInfo *info, const char *cmd, const char *fi
 
         fclose(f);
         close(data_sock);
-        leer_respuesta(ctrl); // 226 Transfer complete
+        leer_respuesta(ctrl);
         printf("✅ [Hijo %d] Archivo subido: %s\n", getpid(), filename);
     }
 
@@ -281,46 +318,39 @@ void hijo_transferencia(const SessionInfo *info, const char *cmd, const char *fi
     exit(0);
 }
 
-/* Pequeña función para evitar zombies (recolección no bloqueante) */
+/* Evitar zombies */
 void reap_children(void) {
     int status;
-    while (waitpid(-1, &status, WNOHANG) > 0) {
-        // recogidos
-    }
+    while (waitpid(-1, &status, WNOHANG) > 0) {}
 }
 
 /* ----------------- MAIN ----------------- */
-
 int main() {
-    int sock;  // conexión de control principal
+    int sock;
     char buffer[BUFFER_SIZE];
     char linea[BUFFER_SIZE];
     SessionInfo info;
     memset(&info, 0, sizeof(info));
 
-    /* ====== Pedimos IP del servidor y credenciales ====== */
     printf("Servidor FTP (IP o nombre): ");
-    if (!fgets(info.server_ip, sizeof(info.server_ip), stdin)) exit(1);
-    info.server_ip[strcspn(info.server_ip, "\r\n")] = '\0';
+    fgets(info.server_ip, sizeof(info.server_ip), stdin);
+    info.server_ip[strcspn(info.server_ip, "\r\n")] = 0;
 
     printf("USER: ");
-    if (!fgets(info.user, sizeof(info.user), stdin)) exit(1);
-    info.user[strcspn(info.user, "\r\n")] = '\0';
+    fgets(info.user, sizeof(info.user), stdin);
+    info.user[strcspn(info.user, "\r\n")] = 0;
 
     printf("PASS: ");
-    if (!fgets(info.pass, sizeof(info.pass), stdin)) exit(1);
-    info.pass[strcspn(info.pass, "\r\n")] = '\0';
+    fgets(info.pass, sizeof(info.pass), stdin);
+    info.pass[strcspn(info.pass, "\r\n")] = 0;
 
-    info.use_pasv = 1; // por defecto trabajamos en PASV
+    info.use_pasv = 1;
 
-    /* ====== Conexión de control principal usando connectTCP ====== */
     sock = connectTCP(info.server_ip, FTP_PORT_STR);
-    if (sock < 0) errexit("No se pudo conectar al servidor FTP\n");
+    if (sock < 0) errexit("No se pudo conectar.\n");
 
-    // Banner 220
     leer_respuesta(sock);
 
-    // Enviamos USER / PASS (implementación de esos comandos)
     snprintf(buffer, sizeof(buffer), "USER %s\r\n", info.user);
     send(sock, buffer, strlen(buffer), 0);
     leer_respuesta(sock);
@@ -329,28 +359,33 @@ int main() {
     send(sock, buffer, strlen(buffer), 0);
     leer_respuesta(sock);
 
+    
+    send(sock, "TYPE I\r\n", 8, 0);
+    leer_respuesta(sock);
+
     printf("\nSesión FTP iniciada. Modo de datos por defecto: PASV.\n");
     printf("Puedes cambiar a PORT con el comando: MODE PORT\n");
     printf("Volver a PASV con: MODE PASV\n\n");
 
-    /* ====== Bucle principal de comandos ====== */
     while (1) {
-        reap_children(); // limpiar hijos terminados
+
+        reap_children();
 
         printf("\nComandos disponibles:\n");
         printf(" LIST                  - Listar archivos\n");
         printf(" CWD <dir>             - Cambiar directorio\n");
         printf(" PWD                   - Directorio actual\n");
-        printf(" RETR <f1> [f2 ...]    - Descargar uno o varios archivos (concurrente)\n");
-        printf(" STOR <f1> [f2 ...]    - Subir uno o varios archivos (concurrente)\n");
-        printf(" DELE <archivo>        - Eliminar archivo en servidor\n");
-        printf(" MODE PASV | MODE PORT - Cambiar modo de transferencia (usa PASV/PORT)\n");
+        printf(" MKD <dir>             - Crear directorio\n");
+        printf(" RMD <dir>             - Eliminar directorio\n");
+        printf(" RETR <f1> [f2 ...]    - Descargar archivos (concurrente, con REST)\n");
+        printf(" STOR <f1> [f2 ...]    - Subir archivos (concurrente)\n");
+        printf(" DELE <archivo>        - Eliminar archivo\n");
+        printf(" MODE PASV | MODE PORT - Cambiar modo de datos\n");
         printf(" QUIT                  - Salir\n\n");
 
         printf("ftp> ");
         if (!fgets(linea, sizeof(linea), stdin)) break;
 
-        // Parseo básico por tokens
         char *argv[MAX_ARGS];
         int argc = 0;
         char *tok = strtok(linea, " \t\r\n");
@@ -360,30 +395,27 @@ int main() {
         }
         if (argc == 0) continue;
 
-        /* ---- QUIT ---- */
+        /* QUIT */
         if (strcasecmp(argv[0], "QUIT") == 0) {
             send(sock, "QUIT\r\n", 6, 0);
             leer_respuesta(sock);
             break;
         }
 
-        /* ---- MODE PASV / MODE PORT ---- */
+        /* MODE */
         else if (strcasecmp(argv[0], "MODE") == 0 && argc >= 2) {
             if (strcasecmp(argv[1], "PASV") == 0) {
                 info.use_pasv = 1;
-                printf("✅ Modo de datos cambiado a PASV.\n");
+                printf("Modo PASV.\n");
             } else if (strcasecmp(argv[1], "PORT") == 0) {
                 info.use_pasv = 0;
-                printf("✅ Modo de datos cambiado a PORT.\n");
-            } else {
-                printf("Uso: MODE PASV | MODE PORT\n");
+                printf("Modo PORT.\n");
             }
         }
 
-        /* ---- LIST ---- */
+        /* LIST */
         else if (strcasecmp(argv[0], "LIST") == 0) {
-            int data_sock;
-            int lsock;
+            int data_sock, lsock;
 
             if (info.use_pasv) {
                 data_sock = abrir_pasv(sock);
@@ -394,71 +426,96 @@ int main() {
                 if (data_sock < 0) continue;
             }
 
-            snprintf(buffer, sizeof(buffer), "LIST\r\n");
-            send(sock, buffer, strlen(buffer), 0);
-            leer_respuesta(sock); // 150
+            send(sock, "LIST\r\n", 6, 0);
+            leer_respuesta(sock);
 
             int len;
             while ((len = recv(data_sock, buffer, BUFFER_SIZE - 1, 0)) > 0) {
-                buffer[len] = '\0';
+                buffer[len] = 0;
                 printf("%s", buffer);
             }
             close(data_sock);
-            leer_respuesta(sock); // 226
+            leer_respuesta(sock);
         }
 
-        /* ---- CWD dir ---- */
+        /* CWD */
         else if (strcasecmp(argv[0], "CWD") == 0 && argc >= 2) {
             snprintf(buffer, sizeof(buffer), "CWD %s\r\n", argv[1]);
             send(sock, buffer, strlen(buffer), 0);
             leer_respuesta(sock);
         }
 
-        /* ---- PWD ---- */
+        /* PWD */
         else if (strcasecmp(argv[0], "PWD") == 0) {
             send(sock, "PWD\r\n", 5, 0);
             leer_respuesta(sock);
         }
 
-        /* ---- DELE archivo ---- */
+        /* MKD */
+        else if (strcasecmp(argv[0], "MKD") == 0 && argc >= 2) {
+            snprintf(buffer, sizeof(buffer), "MKD %s\r\n", argv[1]);
+            send(sock, buffer, strlen(buffer), 0);
+            leer_respuesta(sock);
+        }
+
+        /* RMD */
+        else if (strcasecmp(argv[0], "RMD") == 0 && argc >= 2) {
+            snprintf(buffer, sizeof(buffer), "RMD %s\r\n", argv[1]);
+            send(sock, buffer, strlen(buffer), 0);
+            leer_respuesta(sock);
+        }
+
+        /* DELE */
         else if (strcasecmp(argv[0], "DELE") == 0 && argc >= 2) {
             snprintf(buffer, sizeof(buffer), "DELE %s\r\n", argv[1]);
             send(sock, buffer, strlen(buffer), 0);
             leer_respuesta(sock);
         }
 
-        /* ---- RETR f1 [f2 ...] → concurrente ---- */
+        /* ---------------- RETR (concurrente, robusto) ---------------- */
         else if (strcasecmp(argv[0], "RETR") == 0 && argc >= 2) {
             for (int i = 1; i < argc; i++) {
+
                 pid_t pid = fork();
-                if (pid == 0) {
-                    // Proceso hijo: hace una sola transferencia RETR
+
+                if (pid == 0) {  
+                    /* HIJO */
                     hijo_transferencia(&info, "RETR", argv[i]);
-                } else if (pid < 0) {
-                    perror("fork RETR");
-                } else {
+                }
+                else if (pid < 0) {  
+                    /* ERROR */
+                    perror("❌ fork RETR");
+                }
+                else {  
+                    /* PADRE */
                     printf("▶ Lanzado hijo %d para RETR %s\n", pid, argv[i]);
                 }
             }
         }
 
-        /* ---- STOR f1 [f2 ...] → concurrente ---- */
+        /* ---------------- STOR (concurrente, robusto) ---------------- */
         else if (strcasecmp(argv[0], "STOR") == 0 && argc >= 2) {
             for (int i = 1; i < argc; i++) {
+
                 pid_t pid = fork();
-                if (pid == 0) {
-                    // Proceso hijo: hace una sola transferencia STOR
+
+                if (pid == 0) {  
+                    /* HIJO */
                     hijo_transferencia(&info, "STOR", argv[i]);
-                } else if (pid < 0) {
-                    perror("fork STOR");
-                } else {
+                }
+                else if (pid < 0) {  
+                    /* ERROR */
+                    perror("❌ fork STOR");
+                }
+                else {  
+                    /* PADRE */
                     printf("▶ Lanzado hijo %d para STOR %s\n", pid, argv[i]);
                 }
             }
         }
 
         else {
-            printf("⚠ Comando no reconocido o argumentos insuficientes.\n");
+            printf("⚠ Comando no reconocido.\n");
         }
     }
 
