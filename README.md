@@ -250,3 +250,16 @@ ProyectoFTP/
 ├── errexit.c
 └── otros archivos .o generados por compilación
 ```
+## 🔧 Nota sobre la configuración del servidor FTP (vsftpd)
+
+Este cliente se ha probado utilizando un servidor vsftpd en configuración estándar.
+Para asegurar el correcto funcionamiento de los comandos STOR, RETR, PORT, PASV, MKD, RMD y DELE, deben estar activadas las siguientes opciones en /etc/vsftpd.conf:
+
+```
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+connect_from_port_20=YES
+```
+No es necesario modificar ninguna otra opción.
+El cliente funciona tanto en modo PASV como modo PORT usando la configuración por defecto del servidor.
