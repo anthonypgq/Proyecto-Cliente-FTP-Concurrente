@@ -377,8 +377,8 @@ int main() {
         printf(" PWD                   - Directorio actual\n");
         printf(" MKD <dir>             - Crear directorio\n");
         printf(" RMD <dir>             - Eliminar directorio\n");
-        printf(" RETR <f1> [f2 ...]    - Descargar archivos (concurrente, con REST)\n");
-        printf(" STOR <f1> [f2 ...]    - Subir archivos (concurrente)\n");
+        printf(" RETR <f1> [f2 ...]    - Descargar archivos (servidor → cliente), concurrente, con REST\n");
+        printf(" STOR <f1> [f2 ...]    - Subir archivos (cliente → servidor), concurrente\n");
         printf(" DELE <archivo>        - Eliminar archivo\n");
         printf(" MODE PASV | MODE PORT - Cambiar modo de datos\n");
         printf(" QUIT                  - Salir\n\n");
