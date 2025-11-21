@@ -473,3 +473,7 @@ Para compilar correctamente, coloque estos archivos junto al código principal y
 ```bash
 make
 ```
+### ✔ Nota sobre la interfaz interactiva
+
+Durante operaciones **RETR** o **STOR**, los mensajes del proceso hijo se muestran en pantalla mientras el proceso padre continúa esperando el siguiente comando.  
+Una vez que la transferencia finaliza, el cliente ya está listo para recibir otra orden: basta con presionar **ENTER** para que aparezca nuevamente el prompt `ftp>`.
