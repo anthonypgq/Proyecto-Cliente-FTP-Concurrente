@@ -208,22 +208,6 @@ STOR <f1> [f2 ...]
 QUIT
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Aquí tienes la **sección completa de ejemplos** en **Markdown**, lista para pegar directamente en tu README:
-
 ---
 
 ## ▶ Ejemplos de Uso (todos los comandos)
@@ -395,22 +379,6 @@ QUIT
 Finaliza la conexión de control.
 
 ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ## 📂 Estructura del Proyecto
