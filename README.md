@@ -110,7 +110,7 @@ Esta funcionalidad solo es posible porque todo el cliente usa **TYPE I (binario)
 | PORT    | Activar modo activo      |
 | PASV    | Activar modo pasivo      |
 
-### ✔ Extensiones implementadas (EXTRA CRÉDITO)
+### ✔ Extensiones implementadas 
 
 | Comando  | Descripción                      |
 | -------- | -------------------------------- |
@@ -126,7 +126,7 @@ Esta funcionalidad solo es posible porque todo el cliente usa **TYPE I (binario)
 
 ## 🧠 Requerimientos Técnicos Cumplidos
 
-Este proyecto cumple completamente con lo solicitado:
+Este proyecto cumple con:
 
 ### ✔ Uso obligatorio de:
 
@@ -193,6 +193,17 @@ USER:
 PASS:
 ```
 
+Para realizar pruebas en una computadora personal
+
+En la primera línea debe ingresarse:
+```
+localhost
+```
+
+Esto indica al cliente que se conecte al servidor FTP instalado en la misma máquina (vsftpd en Linux, por ejemplo).
+
+Luego, se ingresan el usuario y contraseña configurados para el servidor FTP local.
+
 Luego mostrará los comandos disponibles:
 
 ```
@@ -201,10 +212,10 @@ CWD <dir>
 PWD
 MKD <dir>
 RMD <dir>
-DELE <archivo>
-MODE PASV | MODE PORT
 RETR <f1> [f2 ...]
 STOR <f1> [f2 ...]
+DELE <archivo>
+MODE PASV | MODE PORT
 QUIT
 ```
 
@@ -289,7 +300,11 @@ Elimina un archivo del directorio remoto.
 
 ---
 
-### 🔹 **7. MODE PASV — Activar modo pasivo**
+### 🔹 **7. MODE PASV — Activar modo pasivo (modo predeterminado)**
+
+Cuando se ejecuta el cliente FTP:
+
+El modo de datos por defecto es PASV.
 
 ```txt
 MODE PASV
@@ -314,8 +329,15 @@ El cliente abre un puerto local, envía `PORT h1,h2,h3,h4,p1,p2` y el servidor s
 ```txt
 RETR video.mp4
 ```
+En este modo:
 
 Crea un proceso hijo que descarga el archivo sin bloquear la sesión principal.
+
+Se puede volver a PASV con:
+
+```
+MODE PASV
+```
 
 #### Descargar varios archivos **concurrentemente**
 
@@ -348,25 +370,53 @@ STOR a.pdf b.pdf c.pdf
 El usuario **no escribe REST manualmente**.
 El cliente lo aplica automáticamente si detecta un archivo parcial.
 
-Ejemplo:
+---
+
+### ✔️ Cómo probar REST correctamente
+
+Se recomienda usar un archivo grande, **de al menos 300 MB**, para que la transferencia dure lo suficiente como para poder interrumpirla.
+
+#### Ejemplo:
 
 ```txt
 RETR archivoGrande.bin
 ```
 
-Si el archivo existe localmente:
+1. El archivo comenzará a descargarse.
+
+2. Después de unos segundos, **interrumpe la ejecución del cliente hijo** usando:
+
+   ```
+   Ctrl + C
+   ```
+
+   Esto aborta la transferencia y deja un archivo parcial en el directorio del cliente.
+
+3. Vuelve a ejecutar el cliente:
+
+   ```bash
+   ./ftp_client
+   ```
+
+4. Inicia sesión de nuevo (por ejemplo, usando `localhost`, usuario y contraseña).
+
+5. Ejecuta otra vez:
+
+   ```txt
+   RETR archivoGrande.bin
+   ```
+
+Ahora deberías ver mensajes como:
 
 ```txt
-archivoGrande.bin (71655424 bytes) ya existe → enviando REST 71655424
-```
-
-Si el servidor acepta:
-
-```txt
+archivoGrande.bin ya existe (71655424 bytes). Intentando REST...
 350 Restart position accepted
 ```
 
-La descarga continúa desde donde se quedó.
+El servidor y el cliente **reanudarán la descarga desde el punto exacto donde se interrumpió**, completando el archivo correctamente **sin comenzar desde cero**.
+
+Esto confirma que la función **REST** está funcionando como debe.
+
 
 ---
 
