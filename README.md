@@ -208,34 +208,129 @@ STOR <f1> [f2 ...]
 QUIT
 ```
 
-### Ejemplos
+## ▶ Ejemplos de Uso (todos los comandos)
 
-#### Descargar un archivo:
+A continuación se muestran ejemplos concretos del uso de cada comando soportado por el cliente FTP.
 
+##🔹 1. LIST — Listar archivos del servidor
+
+Muestra todos los archivos del directorio actual del servidor.
 ```
-RETR archivoGrande.bin
-```
-
-#### Descargar varios en paralelo:
-
-```
-RETR foto1.jpg foto2.jpg foto3.jpg
+LIST
 ```
 
-#### Subir un archivo:
+Salida típica:
+```
+-rw-r--r-- archivo1.txt
+drwxr-xr-x carpeta1
+```
 
+##🔹 2. PWD — Mostrar el directorio actual del servidor
+```
+PWD
+```
+
+Salida:
+```
+257 "/home/usuario/ftp" is current directory
+```
+
+##🔹 3. CWD <dir> — Cambiar de directorio
+
+Ejemplo:
+```
+CWD Documentos
+```
+
+Cambia el directorio remoto a “Documentos”.
+
+##🔹 4. MKD <dir> — Crear directorio en el servidor
+```
+MKD NuevaCarpeta
+```
+##🔹 5. RMD <dir> — Eliminar directorio
+```
+RMD CarpetaVacia
+```
+
+Solo funciona si el directorio está vacío.
+
+##🔹 6. DELE <archivo> — Eliminar archivo del servidor
+```
+DELE archivoObsoleto.txt
+```
+##🔹 7. MODE PASV — Activar transferencia pasiva
+```
+MODE PASV
+```
+
+El cliente:
+
+Envia PASV
+
+El servidor devuelve IP/puerto
+
+El cliente se conecta al puerto del servidor
+
+##🔹 8. MODE PORT — Activar transferencia activa
+```
+MODE PORT
+```
+
+El cliente:
+
+Abre un puerto local
+
+Envía PORT h1,h2,h3,h4,p1,p2
+
+El servidor se conecta al cliente
+
+##🔹 9. RETR <archivo> — Descargar un archivo
+```
+RETR video.mp4
+```
+
+Crea un hijo que abre su propia conexión y descarga el archivo.
+
+Descargar varios concurrentemente:
+```
+RETR foto1.png foto2.png foto3.png
+```
+
+Cada archivo se descarga en su propio proceso hijo, sin bloquear la sesión principal.
+
+##🔹 10. STOR <archivo> — Subir un archivo
 ```
 STOR documento.pdf
 ```
 
-#### Cambiar entre PASV y PORT:
+Sube un archivo local al servidor.
 
+Subir varios concurrentemente:
 ```
-MODE PORT
-MODE PASV
+STOR a.pdf b.pdf c.pdf
 ```
 
----
+##🔹 11. REST (automático) — Reanudar descargas interrumpidas
+
+El usuario NO escribe REST manualmente.
+
+El cliente detecta automáticamente si existe un archivo parcial:
+```
+RETR archivoGrande.bin
+```
+
+Si el archivo existe localmente:
+```
+archivoGrande.bin (71655424 bytes) Ya existe → enviando REST 71655424
+```
+
+Si el servidor responde 350, la descarga se reanuda desde ahí.
+
+##🔹 12. QUIT — Cerrar sesión
+```
+QUIT
+```
 
 ## 📂 Estructura del Proyecto
 
