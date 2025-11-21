@@ -250,11 +250,3 @@ ProyectoFTP/
 ├── errexit.c
 └── otros archivos .o generados por compilación
 ```
-
-
-
-
-
-
-
-Solo dime: **"Hazme el informe"** y lo preparo.
